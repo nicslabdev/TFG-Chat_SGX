@@ -1,0 +1,52 @@
+
+
+
+enclave {
+
+    //Entorno del enclave
+
+    //Importacion de librerias necesarias para la compilacion de las funciones del encalve
+
+    include "user_types.h"
+    include "sgx_tcrypto.h"
+
+    
+    from "Edger8rSyntax/Types.edl" import *;
+    from "Edger8rSyntax/Pointers.edl" import *;
+    from "Edger8rSyntax/Arrays.edl" import *;
+    from "Edger8rSyntax/Functions.edl" import *;
+
+    from "TrustedLibrary/Libc.edl" import *;
+    from "TrustedLibrary/Libcxx.edl" import ecall_exception, ecall_map;
+    from "TrustedLibrary/Thread.edl" import *;
+
+    trusted {    //Entorno confiable
+
+        //ECALL's
+
+        //Función que genera un par de claves en el enclave: privada y pública (la extrae hacia la aplicación).
+	    public void new_keypair( [out, size=len] sgx_ec256_public_t *extern_pk, size_t len);           
+                                                                            
+        //Función que utilizando la clave privada interna del enclave y la pública del otro extremo del canal
+        //(extern_pk) calcula y almacena en el contenedor deSGX la clave simétrica. Protocolo Diffie-Hellman (DH).                              
+        public void computeDHKey( [in, size=len]  sgx_ec256_public_t *extern_pk, size_t len);          
+                                                                                                       
+                                                                                        
+
+        //Funciones de cifrado y descifrado de la información. En la primera de ellas se introduce texto plano, se cifra con la clave simétrica y se devuelve en forma de bytes. En el segundo caso se inserta de este modo (bytes) y se recupera tras el decodificado la información en texto plano.
+
+        public void sgx_encrypt( [in,size=len] char *encMessageIn, size_t len, [out,size=lenOut] char *decMessageOut, size_t lenOut);
+        public void sgx_decrypt( [in,size=len] char *decMessageIn, size_t len, [out,size=lenOut] char *encMessageOut, size_t lenOut);
+
+    };
+    
+    untrusted {    //Entorno no-confiable
+
+
+        //OCALL's
+
+        void ocall_print_string([in, string] const char *str);         //Función usada en debug para mostrar información interna del enclave sin extraerta.
+	
+    };
+
+};
