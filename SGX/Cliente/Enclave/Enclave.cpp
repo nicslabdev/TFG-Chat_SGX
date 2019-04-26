@@ -1,12 +1,11 @@
 
+//Librerias necesarias para la compilacion de SGX
 
 #include <stdlib.h>
 #include <string.h>
 
 #include "sgx_tcrypto.h"
 #include "sgx_trts.h"
-
-#define MAX_BUF_LEN 1024
 
 #include <stdarg.h>
 #include <stdio.h>      
@@ -17,6 +16,9 @@
 #include <unistd.h>
 
 #include "ippcp.h"
+
+#define MAX_BUF_LEN 1024           //Tamano maximo de las tramas
+
 
 //- INICIALIZACIÓN VBLES -----------------------------------------------------
 
@@ -30,15 +32,16 @@
 
     sgx_ec256_signature_t sing;
 
-    uint8_t *I_rand, *R_rand;
-
-    uint8_t p_ctr_tx[16] = {0x00};
-    uint8_t p_ctr_rx[16] = {0x00};
-
     unsigned char ebytes[MAX_BUF_LEN];
     size_t ebytes_len;
 
-    //--------------------------------------
+    uint8_t I_rand[32] = {0xe3, 0xfb, 0x88, 0xb2, 0xe6, 0x85, 0xda, 0x53, 0xbe, 0xed, 0xcb, 0x62, 0x5d, 0xf5,
+0x27, 0xa1, 0xef, 0xeb, 0x53, 0xb0, 0x44, 0x74, 0x38, 0x20, 0x24, 0xfc, 0x3a, 0xde, 0x46, 0x70, 0x7d, 0x8d};
+
+    uint8_t R_rand[32] = {0x47, 0xe5, 0x85, 0x01, 0x48, 0xfe, 0x77, 0x0e, 0x7f, 0x54, 0xcb, 0xb1, 0xd2, 0x0e,
+0x27, 0x3c, 0x44, 0xdd, 0xa4, 0x8b, 0x31, 0xf5, 0x4d, 0xc5, 0x6a, 0x43, 0x4c, 0xd7, 0xab, 0xfd, 0xe5, 0x61};
+
+    bool DH_Rol = 0;
 
     uint8_t *MasterKey;
 
@@ -57,82 +60,24 @@
     uint8_t PKG_IV[16] = {0x00};
     uint8_t PKG_IV2[16] = {0x00};
 
-    int offset = 0;
+    uint offset = 0;
 
-    int DH_Rol = '\0';
+//------------------------------------------------------------------
 
-    char debug = 0x01;
+char debug = 0x01;
 
-    char log = 0x00;
-
+char log = 0x00;
+    
 //----------------------------------------------------------------------------
 
-//ECALL's
-
-void new_keypair(sgx_ec256_public_t *extern_pk, size_t len){                               //Función que genera un par de claves
-                                                                                            //privada y pública.
-
-
-    sgx_status_t status = sgx_ecc256_open_context(&handle);                                 //Apertura de contexto criptográfico.
-
-    sgx_status_t statuz = sgx_ecc256_create_key_pair(&Pv, &Pu, handle);                     //Generación de claves.
-
-    if(status == SGX_SUCCESS && statuz == SGX_SUCCESS){                                     //Si las operaciones se realizan con 
-                                                                                            //éxito se devuelve la clave pública.
-        *extern_pk = Pu;
-
-    }
-
-    printf("p_ctr_tx: ");
-    
-    
-    printf("p_ctr_rx: ");
-
-}
-
-void computeDHKey( sgx_ec256_public_t *extern_pk, size_t len){                              //Función que computa la clave simétrica.
-
-    application_pk = *extern_pk;
-
-    sgx_ecc256_compute_shared_dhkey(&Pv, &application_pk, &DHKey, handle);                  //Computacíon de la clave.
-}
-
-//------------------------------------------------------------
-
-void get_rand(int rol, uint8_t* pointer, size_t len){
-
-    uint8_t rand[len];
-
-     sgx_read_rand((unsigned char*)rand, 32);
-
-    if(rol == 1){
-
-        I_rand = (uint8_t*) malloc(len*sizeof(uint8_t));
-        memcpy(I_rand, rand, len);
-    }else{
-
-        R_rand = (uint8_t*) malloc(len*sizeof(uint8_t));
-        memcpy(R_rand, rand, len);
-
-    }
-
-    if(pointer != NULL) delete(pointer);
-
-    pointer =  (uint8_t*) malloc(len*sizeof(uint8_t));
-    memcpy(pointer, rand, len);
-
-    DH_Rol = rol;
-
-}
- 
-void print_hex(uint8_t* array, size_t len){                         //Muestra con formateo hexadecimal                                                                        //la información de un array uint8_t
+void print_hex(uint8_t* array, size_t len){                         //Muestra con formateo hexadecimal
+                                                                        //la información de un array uint8_t
         int i;
             for (i = 0; i < (int) len; i++) {
                 printf("%02x ", array[i]);
             }
             printf("\n\n");
 }
-
 
 uint8_t* calculateHMAC(uint8_t *key, size_t key_len, uint8_t *nonce, size_t nonce_len, size_t out_len) {
     
@@ -233,14 +178,9 @@ uint8_t* PRF(uint8_t *key, uint8_t *label, uint8_t *seed, size_t bytes, int labe
 
 }
 
+//----------------------------------------------------------------------------------------------------------------------------------------
 
-void autoset_key(int Rol, uint8_t* randB, size_t len){
-
-        if(Rol == 1){
-            memcpy(R_rand, randB, 32);
-        }else{
-            memcpy(I_rand, randB, 32);
-        }
+void autoset_key(int Rol){
 
         IpR_rand = (uint8_t*)malloc(64*sizeof(uint8_t));
         memcpy(IpR_rand, I_rand, 32);
@@ -275,6 +215,18 @@ void autoset_key(int Rol, uint8_t* randB, size_t len){
         printf("\nIVNONCE_I: "); print_hex(IVNONCE_I, 16);
         printf("\nIVNONCE_R: "); print_hex(IVNONCE_R, 16);
 
+        /*for(int i=0; i<5; i++){
+            uint8_t* Aux = PRF(MasterKey, Key_Block, IpR_rand, 16, 128);
+            printf("IV %d_:\n", i); print_hex(Aux, 16);
+            delete(Aux);
+        }*/
+
+        printf("Encl_Rol = %d\n", Rol );
+
+        DH_Rol = Rol;
+
+        if(DH_Rol) printf("Im initiator\n");
+        else printf("Im receiver\n");
 //----------------------------------------------------------------------
 
         /*printf("\n\nDiffie-Hellman key: "); print_hex(DHKey, 32);
@@ -446,17 +398,79 @@ void cypher_out(char *encMessageIn, size_t lenIn, char *decMessageOut, size_t le
 
 }
 
-/* 
- * printf: 
- *   Invokes OCALL to display the enclave buffer to the terminal.
- */
-void printf(const char *fmt, ...)
+//ECALL's
+
+void new_keypair( sgx_ec256_public_t *extern_pk, size_t len){                               //Función que genera un par de claves
+                                                                                            //privada y pública.
+
+
+    sgx_status_t status = sgx_ecc256_open_context(&handle);                                 //Apertura de contexto criptográfico.
+
+    sgx_status_t statuz = sgx_ecc256_create_key_pair(&Pv, &Pu, handle);                     //Generación de claves.
+
+    if(status == SGX_SUCCESS && statuz == SGX_SUCCESS){                                     //Si las operaciones se realizan con 
+                                                                                            //éxito se devuelve la clave pública.
+        *extern_pk = Pu;
+
+    }
+
+}
+
+void computeDHKey( sgx_ec256_public_t *extern_pk, size_t len){                              //Función que computa la clave simétrica.
+
+    application_pk = *extern_pk;
+
+    sgx_ecc256_compute_shared_dhkey(&Pv, &application_pk, &DHKey, handle);                  //Computacíon de la clave.
+
+}
+
+void sgx_encrypt(char *decMessageIn, size_t len, char *encMessageOut, size_t lenOut)        //Función codificadora de texto plano.
+{
+    uint8_t *origMessage = (uint8_t *) decMessageIn;
+    uint8_t p_dst[lenOut] = {0};
+
+    // Generate the IV (nonce)
+    sgx_read_rand(p_dst + SGX_AESGCM_MAC_SIZE, SGX_AESGCM_IV_SIZE);                         //Se genera una secuencia aleatoria
+                                                                                            //usada por el codificador
+
+    sgx_rijndael128GCM_encrypt(                                                             //Codificador basado en el algoritmo de
+                                                                                            //Rijndael (estandar AES).
+        (sgx_aes_gcm_128bit_key_t *) &DHKey.s,
+        origMessage, len, 
+        p_dst + SGX_AESGCM_MAC_SIZE + SGX_AESGCM_IV_SIZE,
+        p_dst + SGX_AESGCM_MAC_SIZE, SGX_AESGCM_IV_SIZE,
+        NULL, 0,
+        (sgx_aes_gcm_128bit_tag_t *) (p_dst));  
+    memcpy(encMessageOut,p_dst,lenOut);                                                     //Se devuelve el texto codificado.
+}
+
+void sgx_decrypt(char *encMessageIn, size_t len, char *decMessageOut, size_t lenOut)        //Función decodificadora de texto codificado.
+{
+    uint8_t *encMessage = (uint8_t *) encMessageIn;
+    uint8_t p_dst[lenOut] = {0};
+
+    sgx_rijndael128GCM_decrypt(                                                             //Decodificador basado en el algoritmo
+                                                                                            //Rijndael (estandar AES).
+        (sgx_aes_gcm_128bit_key_t *) &DHKey.s,
+        encMessage + SGX_AESGCM_MAC_SIZE + SGX_AESGCM_IV_SIZE,
+        lenOut,
+        p_dst,
+        encMessage + SGX_AESGCM_MAC_SIZE, SGX_AESGCM_IV_SIZE,
+        NULL, 0,
+        (sgx_aes_gcm_128bit_tag_t *) encMessage);
+    memcpy(decMessageOut, p_dst, lenOut);
+
+}
+
+
+//OCALL's
+
+void printf(const char *fmt, ...)                              //Función de escritura en el contexto de la aplicación.
 {
     char buf[BUFSIZ] = {'\0'};
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(buf, BUFSIZ, fmt, ap);
     va_end(ap);
-    ocall_print_string(buf);
-}
-
+    ocall_print_string(buf);                                   //Llamada a la función externa con los datos a representar.
+} 
