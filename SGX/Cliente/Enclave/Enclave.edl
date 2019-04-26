@@ -3,10 +3,6 @@
 
 enclave {
 
-    //Entorno del enclave
-
-    //Importacion de librerias necesarias para la compilacion de las funciones del encalve
-
     include "user_types.h"
     include "sgx_tcrypto.h"
 
@@ -20,27 +16,21 @@ enclave {
     from "TrustedLibrary/Libcxx.edl" import ecall_exception, ecall_map;
     from "TrustedLibrary/Thread.edl" import *;
 
-    trusted {    //Entorno confiable
+    trusted{
 
-        //ECALL's
+	    public void new_keypair([out, size=len] sgx_ec256_public_t *extern_pk, size_t len);                                                                                                     
 
-        //Función que genera un par de claves en el enclave: privada y pública (la extrae hacia la aplicación).
-	    public void new_keypair( [out, size=len] sgx_ec256_public_t *extern_pk, size_t len);           
-                                                                            
-        //Función que utilizando la clave privada interna del enclave y la pública del otro extremo del canal
-        //(extern_pk) calcula y almacena en el contenedor deSGX la clave simétrica. Protocolo Diffie-Hellman (DH).                              
-        public void computeDHKey( [in, size=len]  sgx_ec256_public_t *extern_pk, size_t len);          
-                                                                                                       
-                                                                                        
+        public void computeDHKey([in, size=len]  sgx_ec256_public_t *extern_pk, size_t len);          
 
-        //Funciones de cifrado y descifrado de la información. En la primera de ellas se introduce texto plano, se cifra con la clave simétrica y se devuelve en forma de bytes. En el segundo caso se inserta de este modo (bytes) y se recupera tras el decodificado la información en texto plano.
+        public void cypher_in([in,size=lenIn] char *decMessageIn, size_t lenIn, [out,size=lenOut] char *encMessageOut, size_t lenOut);
+        public void cypher_out([in,size=lenIn] char *encMessageIn, size_t lenIn, [out,size=lenOut] char *decMessageOut, size_t lenOut);
+        public void autoset_key(int Rol, [in,size=len] uint8_t* randB, size_t len);
 
-        public void sgx_encrypt( [in,size=len] char *encMessageIn, size_t len, [out,size=lenOut] char *decMessageOut, size_t lenOut);
-        public void sgx_decrypt( [in,size=len] char *decMessageIn, size_t len, [out,size=lenOut] char *encMessageOut, size_t lenOut);
+        public void get_rand(int rol, [out,size=len] uint8_t* pointer, size_t len);
 
     };
     
-    untrusted {    //Entorno no-confiable
+    untrusted{
 
 
         //OCALL's
